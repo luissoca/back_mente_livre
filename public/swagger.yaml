@@ -1,0 +1,2198 @@
+openapi: 3.0.0
+info:
+  title: 'Mente Livre API'
+  description: 'API REST para el sistema de gestión de terapeutas y citas de Mente Livre'
+  contact:
+    name: 'Mente Livre'
+    email: mentelivre.pe@gmail.com
+  version: 1.0.0
+servers:
+  -
+    url: 'https://backend.mentelivre.org/'
+    description: 'Servidor de Desarrollo Local'
+paths:
+  /appointments:
+    get:
+      tags:
+        - Appointments
+      summary: 'Listar citas'
+      operationId: getAppointments
+      parameters:
+        -
+          name: therapist_id
+          in: query
+          required: false
+          schema:
+            type: string
+        -
+          name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - pending
+              - confirmed
+              - completed
+              - cancelled
+              - pending_payment
+              - payment_review
+        -
+          name: date_from
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+        -
+          name: date_to
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+        -
+          name: patient_email
+          in: query
+          required: false
+          schema:
+            type: string
+            format: email
+      responses:
+        '200':
+          description: 'Lista de citas'
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Appointment'
+    post:
+      tags:
+        - Appointments
+      summary: 'Crear nueva cita'
+      operationId: createAppointment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AppointmentCreate'
+      responses:
+        '201':
+          description: 'Cita creada exitosamente'
+          content:
+            application/json:
+              schema:
+                properties:
+                  id: { type: string }
+                  message: { type: string }
+                type: object
+        '400':
+          description: 'Datos inválidos'
+  '/appointments/{id}':
+    get:
+      tags:
+        - Appointments
+      summary: 'Obtener cita por ID'
+      operationId: getAppointment
+      parameters:
+        -
+          name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 'Detalle de la cita'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Appointment'
+        '404':
+          description: 'Cita no encontrada'
+    put:
+      tags:
+        - Appointments
+      summary: 'Actualizar cita'
+      operationId: updateAppointment
+      parameters:
+        -
+          name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AppointmentUpdate'
+      responses:
+        '200':
+          description: 'Cita actualizada exitosamente'
+        '404':
+          description: 'Cita no encontrada'
+    delete:
+      tags:
+        - Appointments
+      summary: 'Eliminar cita'
+      operationId: deleteAppointment
+      parameters:
+        -
+          name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 'Cita eliminada exitosamente'
+        '404':
+          description: 'Cita no encontrada'
+  /auth/login:
+    post:
+      tags:
+        - Auth
+      summary: 'Iniciar sesión'
+      description: 'Autenticar usuario y obtener token JWT'
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              required:
+                - username
+                - password
+              properties:
+                username:
+                  type: string
+                  example: admin@mentelivre.com
+                password:
+                  type: string
+                  example: password123
+              type: object
+      responses:
+        '200':
+          description: 'Login exitoso'
+          content:
+            application/json:
+              schema:
+                properties:
+                  success: { type: boolean, example: true }
+                  data: { properties: { token: { type: string }, user: { type: object } }, type: object }
+                type: object
+        '401':
+          description: 'Credenciales inválidas'
+  /auth/refresh:
+    post:
+      tags:
+        - Auth
+      summary: 'Refrescar token'
+      description: 'Obtener un nuevo token usando un refresh token'
+      operationId: refreshToken
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              required:
+                - refresh_token
+              properties:
+                refresh_token:
+                  type: string
+              type: object
+      responses:
+        '200':
+          description: 'Token refrescado exitosamente'
+        '401':
+          description: 'Token inválido'
+  /auth/register:
+    post:
+      tags:
+        - Auth
+      summary: 'Registrar nuevo usuario'
+      description: 'Crear una nueva cuenta de usuario'
+      operationId: register
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              required:
+                - email
+                - password
+                - first_name
+                - last_name
+              properties:
+                email:
+                  type: string
+                  example: usuario@example.com
+                password:
+                  type: string
+                  example: password123
+                first_name:
+                  type: string
+                  example: Juan
+                last_name:
+                  type: string
+                  example: Pérez
+              type: object
+      responses:
+        '201':
+          description: 'Registro exitoso'
+          content:
+            application/json:
+              schema:
+                properties:
+                  success: { type: boolean, example: true }
+                  data: { properties: { token: { type: string }, refresh_token: { type: string }, user: { type: object } }, type: object }
+                type: object
+        '400':
+          description: 'Datos inválidos'
+        '409':
+          description: 'El email ya está registrado'
+  /auth/logout:
+    post:
+      tags:
+        - Auth
+      summary: 'Cerrar sesión'
+      description: 'Invalidar el token actual'
+      operationId: logout
+      responses:
+        '200':
+          description: 'Logout exitoso'
+        '401':
+          description: 'No autenticado'
+      security:
+        -
+          bearerAuth: []
+  /auth/forgot-password:
+    post:
+      tags:
+        - Auth
+      summary: 'Solicitar reset de contraseña'
+      description: 'Envía un email con un enlace para restablecer la contraseña'
+      operationId: forgotPassword
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              required:
+                - email
+              properties:
+                email:
+                  type: string
+                  example: usuario@example.com
+              type: object
+      responses:
+        '200':
+          description: 'Solicitud procesada (siempre retorna éxito por seguridad)'
+          content:
+            application/json:
+              schema:
+                properties:
+                  success: { type: boolean, example: true }
+                  message: { type: string }
+                type: object
+  /auth/reset-password:
+    post:
+      tags:
+        - Auth
+      summary: 'Resetear contraseña'
+      description: 'Restablece la contraseña usando un token de recuperación'
+      operationId: resetPassword
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              required:
+                - token
+                - new_password
+              properties:
+                token:
+                  description: 'Token de recuperación recibido por email'
+                  type: string
+                new_password:
+                  description: 'Nueva contraseña (mínimo 6 caracteres)'
+                  type: string
+                  example: nuevaPassword123
+              type: object
+      responses:
+        '200':
+          description: 'Contraseña actualizada exitosamente'
+          content:
+            application/json:
+              schema:
+                properties:
+                  success: { type: boolean, example: true }
+                  message: { type: string }
+                type: object
+        '400':
+          description: 'Datos inválidos'
+        '401':
+          description: 'Token inválido o expirado'
+  /email-domain-rules:
+    get:
+      tags:
+        - 'Email Domain Rules'
+      summary: 'Obtener todas las reglas de dominios'
+      operationId: getEmailDomainRules
+      parameters:
+        -
+          name: active_only
+          in: query
+          required: false
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: 'Lista de reglas de dominios'
+    post:
+      tags:
+        - 'Email Domain Rules'
+      summary: 'Crear regla de dominio'
+      operationId: createEmailDomainRule
+      responses:
+        '201':
+          description: 'Regla creada exitosamente'
+        '400':
+          description: 'Datos inválidos'
+      security:
+        -
+          bearerAuth: []
+  '/email-domain-rules/{id}':
+    get:
+      tags:
+        - 'Email Domain Rules'
+      summary: 'Obtener regla por ID'
+      operationId: getEmailDomainRule
+      parameters:
+        -
+          name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 'Regla encontrada'
+        '404':
+          description: 'Regla no encontrada'
+    put:
+      tags:
+        - 'Email Domain Rules'
+      summary: 'Actualizar regla de dominio'
+      operationId: updateEmailDomainRule
+      parameters:
+        -
+          name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 'Regla actualizada exitosamente'
+        '404':
+          description: 'Regla no encontrada'
+      security:
+        -
+          bearerAuth: []
+    delete:
+      tags:
+        - 'Email Domain Rules'
+      summary: 'Eliminar regla de dominio'
+      operationId: deleteEmailDomainRule
+      parameters:
+        -
+          name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 'Regla eliminada exitosamente'
+        '404':
+          description: 'Regla no encontrada'
+      security:
+        -
+          bearerAuth: []
+  /upload/therapist-photo:
+    post:
+      tags:
+        - 'File Upload'
+      summary: 'Subir foto de terapeuta'
+      operationId: uploadTherapistPhoto
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              properties:
+                file:
+                  type: string
+                  format: binary
+                therapist_id:
+                  type: string
+                photo_type:
+                  type: string
+                  enum: [profile, friendly]
+              type: object
+      responses:
+        '200':
+          description: 'Archivo subido exitosamente'
+        '400':
+          description: 'Error en la subida'
+      security:
+        -
+          bearerAuth: []
+  /upload/team-photo:
+    post:
+      tags:
+        - 'File Upload'
+      summary: 'Subir foto de equipo'
+      operationId: uploadTeamPhoto
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              properties:
+                file:
+                  type: string
+                  format: binary
+                team_profile_id:
+                  type: string
+              type: object
+      responses:
+        '200':
+          description: 'Archivo subido exitosamente'
+        '400':
+          description: 'Error en la subida'
+      security:
+        -
+          bearerAuth: []
+  /promo-codes:
+    get:
+      tags:
+        - 'Promo Codes'
+      summary: 'Listar códigos promocionales'
+      operationId: getPromoCodes
+      parameters:
+        -
+          name: is_active
+          in: query
+          required: false
+          schema:
+            type: boolean
+        -
+          name: valid_now
+          in: query
+          required: false
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: 'Lista de códigos promocionales'
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PromoCode'
+      security:
+        -
+          bearerAuth: []
+    post:
+      tags:
+        - 'Promo Codes'
+      summary: 'Crear código promocional'
+      operationId: createPromoCode
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PromoCodeCreate'
+      responses:
+        '201':
+          description: 'Código creado exitosamente'
+          content:
+            application/json:
+              schema:
+                properties:
+                  id: { type: string }
+                  message: { type: string }
+                type: object
+        '400':
+          description: 'Datos inválidos'
+      security:
+        -
+          bearerAuth: []
+  '/promo-codes/{id}':
+    get:
+      tags:
+        - 'Promo Codes'
+      summary: 'Obtener código por ID'
+      operationId: getPromoCode
+      parameters:
+        -
+          name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 'Detalle del código promocional'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PromoCode'
+        '404':
+          description: 'Código no encontrado'
+      security:
+        -
+          bearerAuth: []
+    put:
+      tags:
+        - 'Promo Codes'
+      summary: 'Actualizar código promocional'
+      operationId: updatePromoCode
+      parameters:
+        -
+          name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PromoCodeUpdate'
+      responses:
+        '200':
+          description: 'Código actualizado exitosamente'
+        '404':
+          description: 'Código no encontrado'
+      security:
+        -
+          bearerAuth: []
+  /promo-codes/validate:
+    post:
+      tags:
+        - 'Promo Codes'
+      summary: 'Validar código promocional'
+      operationId: validatePromoCode
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              required:
+                - code
+                - user_email
+              properties:
+                code:
+                  type: string
+                user_email:
+                  type: string
+                  format: email
+                base_price:
+                  description: 'Precio base del terapeuta sobre el cual aplicar el descuento (opcional)'
+                  type: number
+              type: object
+      responses:
+        '200':
+          description: 'Resultado de la validación'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PromoCodeValidation'
+  /site-content:
+    get:
+      tags:
+        - 'Site Content'
+      summary: 'Obtener contenido institucional'
+      operationId: getSiteContent
+      responses:
+        '200':
+          description: 'Contenido institucional del sitio'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SiteContent'
+        '404':
+          description: 'Contenido no encontrado'
+    put:
+      tags:
+        - 'Site Content'
+      summary: 'Actualizar contenido institucional'
+      operationId: updateSiteContent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SiteContentUpdate'
+      responses:
+        '200':
+          description: 'Contenido actualizado exitosamente'
+        '400':
+          description: 'Datos inválidos'
+      security:
+        -
+          bearerAuth: []
+  /team-profiles:
+    get:
+      tags:
+        - 'Team Profiles'
+      summary: 'Listar perfiles del equipo'
+      operationId: getTeamProfiles
+      parameters:
+        -
+          name: member_type
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - clinical
+              - institutional
+        -
+          name: is_visible_public
+          in: query
+          required: false
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: 'Lista de perfiles del equipo'
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TeamProfile'
+    post:
+      tags:
+        - 'Team Profiles'
+      summary: 'Crear nuevo perfil'
+      operationId: createTeamProfile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TeamProfileCreate'
+      responses:
+        '201':
+          description: 'Perfil creado exitosamente'
+          content:
+            application/json:
+              schema:
+                properties:
+                  id: { type: string }
+                  message: { type: string }
+                type: object
+        '400':
+          description: 'Datos inválidos'
+      security:
+        -
+          bearerAuth: []
+  '/team-profiles/{id}':
+    get:
+      tags:
+        - 'Team Profiles'
+      summary: 'Obtener perfil por ID'
+      operationId: getTeamProfile
+      parameters:
+        -
+          name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 'Detalle del perfil'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeamProfile'
+        '404':
+          description: 'Perfil no encontrado'
+    put:
+      tags:
+        - 'Team Profiles'
+      summary: 'Actualizar perfil'
+      operationId: updateTeamProfile
+      parameters:
+        -
+          name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TeamProfileUpdate'
+      responses:
+        '200':
+          description: 'Perfil actualizado exitosamente'
+        '404':
+          description: 'Perfil no encontrado'
+      security:
+        -
+          bearerAuth: []
+    delete:
+      tags:
+        - 'Team Profiles'
+      summary: 'Eliminar perfil'
+      operationId: deleteTeamProfile
+      parameters:
+        -
+          name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 'Perfil eliminado exitosamente'
+        '404':
+          description: 'Perfil no encontrado'
+      security:
+        -
+          bearerAuth: []
+  /therapists:
+    get:
+      tags:
+        - Therapists
+      summary: 'Obtener todos los terapeutas activos'
+      operationId: getTherapists
+      parameters:
+        -
+          name: all
+          in: query
+          description: 'Si es true, devuelve todos los terapeutas (activos e inactivos). Requiere autenticación.'
+          required: false
+          schema:
+            type: string
+            enum:
+              - 'true'
+              - 'false'
+      responses:
+        '200':
+          description: 'Lista de terapeutas'
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Therapist'
+      security:
+        -
+          bearerAuth: []
+    post:
+      tags:
+        - Therapists
+      summary: 'Crear un nuevo terapeuta'
+      operationId: createTherapist
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TherapistCreate'
+      responses:
+        '201':
+          description: 'Terapeuta creado exitosamente'
+          content:
+            application/json:
+              schema:
+                properties:
+                  message: { type: string }
+                  data: { properties: { id: { type: string, format: uuid } }, type: object }
+                type: object
+        '401':
+          description: 'No autenticado'
+        '403':
+          description: 'No autorizado'
+      security:
+        -
+          bearerAuth: []
+  '/therapists/{id}':
+    get:
+      tags:
+        - Therapists
+      summary: 'Obtener un terapeuta por ID'
+      operationId: getTherapist
+      parameters:
+        -
+          name: id
+          in: path
+          description: 'ID del terapeuta (UUID)'
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: 'Terapeuta encontrado'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Therapist'
+        '404':
+          description: 'Terapeuta no encontrado'
+    put:
+      tags:
+        - Therapists
+      summary: 'Actualizar un terapeuta'
+      operationId: updateTherapist
+      parameters:
+        -
+          name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TherapistUpdate'
+      responses:
+        '200':
+          description: 'Terapeuta actualizado'
+        '401':
+          description: 'No autenticado'
+        '403':
+          description: 'No autorizado'
+      security:
+        -
+          bearerAuth: []
+  '/therapists/{therapistId}/photos':
+    get:
+      tags:
+        - 'Therapist Photos'
+      summary: 'Obtener fotos de un terapeuta'
+      operationId: getTherapistPhotos
+      parameters:
+        -
+          name: therapistId
+          in: path
+          required: true
+          schema:
+            type: string
+        -
+          name: photo_type
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - profile
+              - friendly
+      responses:
+        '200':
+          description: 'Lista de fotos del terapeuta'
+    post:
+      tags:
+        - 'Therapist Photos'
+      summary: 'Crear foto para un terapeuta'
+      operationId: createTherapistPhoto
+      parameters:
+        -
+          name: therapistId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '201':
+          description: 'Foto creada exitosamente'
+        '400':
+          description: 'Datos inválidos'
+      security:
+        -
+          bearerAuth: []
+  '/therapist-photos/{id}':
+    get:
+      tags:
+        - 'Therapist Photos'
+      summary: 'Obtener foto por ID'
+      operationId: getTherapistPhoto
+      parameters:
+        -
+          name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 'Foto encontrada'
+        '404':
+          description: 'Foto no encontrada'
+    put:
+      tags:
+        - 'Therapist Photos'
+      summary: 'Actualizar foto'
+      operationId: updateTherapistPhoto
+      parameters:
+        -
+          name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 'Foto actualizada exitosamente'
+        '404':
+          description: 'Foto no encontrada'
+      security:
+        -
+          bearerAuth: []
+    delete:
+      tags:
+        - 'Therapist Photos'
+      summary: 'Eliminar foto'
+      operationId: deleteTherapistPhoto
+      parameters:
+        -
+          name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 'Foto eliminada exitosamente'
+        '404':
+          description: 'Foto no encontrada'
+      security:
+        -
+          bearerAuth: []
+  '/therapists/{therapistId}/pricing':
+    get:
+      tags:
+        - 'Therapist Pricing'
+      summary: 'Obtener precios de un terapeuta'
+      operationId: getTherapistPricing
+      parameters:
+        -
+          name: therapistId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 'Lista de precios del terapeuta'
+    post:
+      tags:
+        - 'Therapist Pricing'
+      summary: 'Crear precio para un terapeuta'
+      operationId: createTherapistPricing
+      parameters:
+        -
+          name: therapistId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '201':
+          description: 'Precio creado exitosamente'
+        '400':
+          description: 'Datos inválidos'
+      security:
+        -
+          bearerAuth: []
+  '/therapist-pricing/{id}':
+    get:
+      tags:
+        - 'Therapist Pricing'
+      summary: 'Obtener precio por ID'
+      operationId: getTherapistPricingById
+      parameters:
+        -
+          name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 'Precio encontrado'
+        '404':
+          description: 'Precio no encontrado'
+    put:
+      tags:
+        - 'Therapist Pricing'
+      summary: 'Actualizar precio'
+      operationId: updateTherapistPricing
+      parameters:
+        -
+          name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 'Precio actualizado exitosamente'
+        '404':
+          description: 'Precio no encontrado'
+      security:
+        -
+          bearerAuth: []
+    delete:
+      tags:
+        - 'Therapist Pricing'
+      summary: 'Eliminar precio'
+      operationId: deleteTherapistPricing
+      parameters:
+        -
+          name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 'Precio eliminado exitosamente'
+        '404':
+          description: 'Precio no encontrado'
+      security:
+        -
+          bearerAuth: []
+  '/therapists/{therapistId}/pricing/batch':
+    put:
+      tags:
+        - 'Therapist Pricing'
+      summary: 'Actualizar múltiples precios de un terapeuta'
+      operationId: updateTherapistPricingBatch
+      parameters:
+        -
+          name: therapistId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 'Precios actualizados exitosamente'
+      security:
+        -
+          bearerAuth: []
+  /users:
+    get:
+      tags:
+        - Users
+      summary: 'Listar usuarios'
+      operationId: getUsers
+      parameters:
+        -
+          name: email_classification
+          in: query
+          required: false
+          schema:
+            type: string
+        -
+          name: verified_email
+          in: query
+          required: false
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: 'Lista de usuarios'
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/User'
+      security:
+        -
+          bearerAuth: []
+  '/users/{id}':
+    get:
+      tags:
+        - Users
+      summary: 'Obtener usuario por ID'
+      operationId: getUser
+      parameters:
+        -
+          name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 'Detalle del usuario'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '404':
+          description: 'Usuario no encontrado'
+      security:
+        -
+          bearerAuth: []
+    put:
+      tags:
+        - Users
+      summary: 'Actualizar usuario'
+      operationId: updateUser
+      parameters:
+        -
+          name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserUpdate'
+      responses:
+        '200':
+          description: 'Usuario actualizado exitosamente'
+        '404':
+          description: 'Usuario no encontrado'
+      security:
+        -
+          bearerAuth: []
+  '/users/{userId}/roles':
+    get:
+      tags:
+        - 'User Roles'
+      summary: 'Obtener roles de un usuario'
+      operationId: getUserRoles
+      parameters:
+        -
+          name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 'Lista de roles del usuario'
+      security:
+        -
+          bearerAuth: []
+    post:
+      tags:
+        - 'User Roles'
+      summary: 'Asignar rol a un usuario'
+      operationId: assignUserRole
+      parameters:
+        -
+          name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              required:
+                - role_name
+              properties:
+                role_name:
+                  type: string
+                  example: therapist
+              type: object
+      responses:
+        '200':
+          description: 'Rol asignado exitosamente'
+        '400':
+          description: 'Error al asignar rol'
+      security:
+        -
+          bearerAuth: []
+  '/users/{userId}/roles/{roleName}':
+    delete:
+      tags:
+        - 'User Roles'
+      summary: 'Remover rol de un usuario'
+      operationId: removeUserRole
+      parameters:
+        -
+          name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+        -
+          name: roleName
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 'Rol removido exitosamente'
+        '400':
+          description: 'Error al remover rol'
+      security:
+        -
+          bearerAuth: []
+  '/therapists/{therapistId}/schedules':
+    get:
+      tags:
+        - Schedules
+      summary: 'Obtener horarios de un terapeuta'
+      operationId: getTherapistSchedules
+      parameters:
+        -
+          name: therapistId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 'Lista de horarios semanales'
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/WeeklySchedule'
+    post:
+      tags:
+        - Schedules
+      summary: 'Crear horario para un terapeuta'
+      operationId: createSchedule
+      parameters:
+        -
+          name: therapistId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WeeklyScheduleCreate'
+      responses:
+        '201':
+          description: 'Horario creado exitosamente'
+          content:
+            application/json:
+              schema:
+                properties:
+                  id: { type: string }
+                  message: { type: string }
+                type: object
+        '400':
+          description: 'Datos inválidos o conflicto de horario'
+      security:
+        -
+          bearerAuth: []
+  '/schedules/{id}':
+    put:
+      tags:
+        - Schedules
+      summary: 'Actualizar horario'
+      operationId: updateSchedule
+      parameters:
+        -
+          name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WeeklyScheduleUpdate'
+      responses:
+        '200':
+          description: 'Horario actualizado exitosamente'
+        '404':
+          description: 'Horario no encontrado'
+        '400':
+          description: 'Conflicto de horario'
+      security:
+        -
+          bearerAuth: []
+    delete:
+      tags:
+        - Schedules
+      summary: 'Eliminar horario'
+      operationId: deleteSchedule
+      parameters:
+        -
+          name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 'Horario eliminado exitosamente'
+        '404':
+          description: 'Horario no encontrado'
+      security:
+        -
+          bearerAuth: []
+  '/therapists/{therapistId}/schedule-overrides':
+    get:
+      tags:
+        - 'Schedule Overrides'
+      summary: 'Obtener excepciones de horario de un terapeuta'
+      operationId: getScheduleOverrides
+      parameters:
+        -
+          name: therapistId
+          in: path
+          required: true
+          schema:
+            type: string
+        -
+          name: week_start_date
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: 'Lista de excepciones de horario'
+    post:
+      tags:
+        - 'Schedule Overrides'
+      summary: 'Crear excepción de horario'
+      operationId: createScheduleOverride
+      parameters:
+        -
+          name: therapistId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '201':
+          description: 'Excepción creada exitosamente'
+        '400':
+          description: 'Datos inválidos'
+      security:
+        -
+          bearerAuth: []
+  '/therapists/{therapistId}/schedule-overrides/batch':
+    post:
+      tags:
+        - 'Schedule Overrides'
+      summary: 'Crear múltiples excepciones de horario'
+      operationId: createScheduleOverridesBatch
+      parameters:
+        -
+          name: therapistId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '201':
+          description: 'Excepciones creadas exitosamente'
+      security:
+        -
+          bearerAuth: []
+  '/schedule-overrides/{id}':
+    put:
+      tags:
+        - 'Schedule Overrides'
+      summary: 'Actualizar excepción de horario'
+      operationId: updateScheduleOverride
+      parameters:
+        -
+          name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 'Excepción actualizada exitosamente'
+      security:
+        -
+          bearerAuth: []
+    delete:
+      tags:
+        - 'Schedule Overrides'
+      summary: 'Eliminar excepción de horario'
+      operationId: deleteScheduleOverride
+      parameters:
+        -
+          name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 'Excepción eliminada exitosamente'
+      security:
+        -
+          bearerAuth: []
+  '/therapists/{therapistId}/schedule-overrides/week':
+    delete:
+      tags:
+        - 'Schedule Overrides'
+      summary: 'Eliminar todas las excepciones de una semana'
+      operationId: deleteScheduleOverridesByWeek
+      parameters:
+        -
+          name: therapistId
+          in: path
+          required: true
+          schema:
+            type: string
+        -
+          name: week_start_date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: 'Excepciones eliminadas exitosamente'
+      security:
+        -
+          bearerAuth: []
+components:
+  schemas:
+    Appointment:
+      properties:
+        id:
+          type: string
+        therapist_id:
+          type: string
+        therapist_name:
+          type: string
+        patient_email:
+          type: string
+        patient_name:
+          type: string
+        patient_phone:
+          type: string
+          nullable: true
+        consultation_reason:
+          type: string
+          nullable: true
+        appointment_date:
+          type: string
+          format: date
+        start_time:
+          type: string
+          format: time
+        end_time:
+          type: string
+          format: time
+        status:
+          type: string
+          enum:
+            - pending
+            - confirmed
+            - completed
+            - cancelled
+            - pending_payment
+            - payment_review
+        pricing_tier:
+          type: string
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      type: object
+    AppointmentCreate:
+      required:
+        - therapist_id
+        - patient_email
+        - patient_name
+        - appointment_date
+        - start_time
+        - end_time
+      properties:
+        therapist_id:
+          type: string
+        patient_email:
+          type: string
+          format: email
+        patient_name:
+          type: string
+        patient_phone:
+          type: string
+          nullable: true
+        consultation_reason:
+          type: string
+          nullable: true
+        appointment_date:
+          type: string
+          format: date
+        start_time:
+          type: string
+          format: time
+        end_time:
+          type: string
+          format: time
+        status:
+          type: string
+          default: pending
+          enum:
+            - pending
+            - confirmed
+        pricing_tier:
+          type: string
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+        original_price:
+          type: number
+          nullable: true
+        discount_applied:
+          type: number
+          nullable: true
+        final_price:
+          type: number
+          nullable: true
+      type: object
+    AppointmentUpdate:
+      properties:
+        status:
+          type: string
+          enum:
+            - pending
+            - confirmed
+            - completed
+            - cancelled
+            - pending_payment
+            - payment_review
+        appointment_date:
+          type: string
+          format: date
+        start_time:
+          type: string
+          format: time
+        end_time:
+          type: string
+          format: time
+        consultation_reason:
+          type: string
+        notes:
+          type: string
+        patient_name:
+          type: string
+        patient_phone:
+          type: string
+      type: object
+    PromoCode:
+      properties:
+        id:
+          type: string
+        code:
+          type: string
+        is_active:
+          type: boolean
+        discount_percent:
+          type: integer
+        base_price:
+          type: number
+        max_uses_total:
+          type: integer
+          nullable: true
+        max_uses_per_user:
+          type: integer
+        max_sessions:
+          type: integer
+        valid_from:
+          type: string
+          format: date-time
+          nullable: true
+        valid_until:
+          type: string
+          format: date-time
+          nullable: true
+        uses_count:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      type: object
+    PromoCodeCreate:
+      required:
+        - code
+        - discount_percent
+      properties:
+        code:
+          type: string
+        is_active:
+          type: boolean
+          default: true
+        discount_percent:
+          type: integer
+        base_price:
+          type: number
+          default: 25
+        max_uses_total:
+          type: integer
+          nullable: true
+        max_uses_per_user:
+          type: integer
+          default: 1
+        max_sessions:
+          type: integer
+          default: 1
+        valid_from:
+          type: string
+          format: date-time
+          nullable: true
+        valid_until:
+          type: string
+          format: date-time
+          nullable: true
+      type: object
+    PromoCodeUpdate:
+      properties:
+        code:
+          type: string
+        is_active:
+          type: boolean
+        discount_percent:
+          type: integer
+        base_price:
+          type: number
+        max_uses_total:
+          type: integer
+        max_uses_per_user:
+          type: integer
+        max_sessions:
+          type: integer
+        valid_from:
+          type: string
+          format: date-time
+        valid_until:
+          type: string
+          format: date-time
+      type: object
+    PromoCodeValidation:
+      properties:
+        valid:
+          type: boolean
+        message:
+          type: string
+        promo_code_id:
+          type: string
+          nullable: true
+        code:
+          type: string
+          nullable: true
+        discount_percent:
+          type: integer
+          nullable: true
+        base_price:
+          type: number
+          nullable: true
+        discount_amount:
+          type: number
+          nullable: true
+        final_price:
+          type: number
+          nullable: true
+        max_sessions:
+          type: integer
+          nullable: true
+      type: object
+    SiteContent:
+      properties:
+        id:
+          type: string
+        about_title:
+          type: string
+        about_intro:
+          type: string
+        mission:
+          type: string
+        vision:
+          type: string
+        approach:
+          type: string
+        purpose:
+          type: string
+          nullable: true
+        values:
+          type: array
+          items:
+            type: string
+          nullable: true
+        updated_by:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      type: object
+    SiteContentUpdate:
+      properties:
+        about_title:
+          type: string
+        about_intro:
+          type: string
+        mission:
+          type: string
+        vision:
+          type: string
+        approach:
+          type: string
+        purpose:
+          type: string
+        values:
+          type: array
+          items:
+            type: string
+      type: object
+    TeamProfile:
+      properties:
+        id:
+          type: string
+        member_type:
+          type: string
+          enum:
+            - clinical
+            - institutional
+        linked_therapist_id:
+          type: string
+          nullable: true
+        linked_therapist_name:
+          type: string
+          nullable: true
+        full_name:
+          type: string
+        public_role_title:
+          type: string
+        professional_level:
+          type: string
+          nullable: true
+        public_bio:
+          type: string
+          nullable: true
+        friendly_photo_url:
+          type: string
+          nullable: true
+        is_visible_public:
+          type: boolean
+        order_index:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      type: object
+    TeamProfileCreate:
+      required:
+        - member_type
+        - full_name
+        - public_role_title
+      properties:
+        member_type:
+          type: string
+          enum:
+            - clinical
+            - institutional
+        linked_therapist_id:
+          type: string
+          nullable: true
+        full_name:
+          type: string
+        public_role_title:
+          type: string
+        professional_level:
+          type: string
+          nullable: true
+        public_bio:
+          type: string
+          nullable: true
+        friendly_photo_url:
+          type: string
+          nullable: true
+        is_visible_public:
+          type: boolean
+          default: true
+        order_index:
+          type: integer
+          default: 0
+      type: object
+    TeamProfileUpdate:
+      properties:
+        member_type:
+          type: string
+          enum:
+            - clinical
+            - institutional
+        linked_therapist_id:
+          type: string
+          nullable: true
+        full_name:
+          type: string
+        public_role_title:
+          type: string
+        professional_level:
+          type: string
+        public_bio:
+          type: string
+        friendly_photo_url:
+          type: string
+        is_visible_public:
+          type: boolean
+        order_index:
+          type: integer
+      type: object
+    Therapist:
+      required:
+        - id
+        - name
+        - university
+        - academic_cycle
+        - hourly_rate
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          example: 'Dr. Juan Pérez'
+        university:
+          type: string
+          example: 'Universidad de Lima'
+        academic_cycle:
+          type: string
+          example: '10mo ciclo'
+        age:
+          type: integer
+          nullable: true
+        years_experience:
+          type: integer
+          nullable: true
+        professional_level:
+          type: string
+          nullable: true
+        role_title:
+          type: string
+          example: Psicólogo/a
+        specialty:
+          type: string
+          nullable: true
+        therapeutic_approach:
+          type: string
+          nullable: true
+        short_description:
+          type: string
+          nullable: true
+        modality:
+          type: string
+          example: Online
+        hourly_rate:
+          type: number
+          format: float
+          example: 40
+        is_active:
+          type: boolean
+        experience_topics:
+          type: array
+          items:
+            type: string
+        photos:
+          type: array
+          items:
+            properties:
+              photo_type:
+                type: string
+                enum:
+                  - profile
+                  - friendly
+              photo_url:
+                type: string
+              photo_position:
+                type: string
+            type: object
+        pricing:
+          type: object
+          additionalProperties: true
+      type: object
+    TherapistCreate:
+      required:
+        - name
+        - university
+        - academic_cycle
+        - hourly_rate
+      properties:
+        name:
+          type: string
+        university:
+          type: string
+        academic_cycle:
+          type: string
+        age:
+          type: integer
+          nullable: true
+        years_experience:
+          type: integer
+          nullable: true
+        professional_level:
+          type: string
+          nullable: true
+        specialty:
+          type: string
+          nullable: true
+        hourly_rate:
+          type: number
+          format: float
+        experience_topics:
+          type: array
+          items:
+            type: string
+      type: object
+    TherapistUpdate:
+      properties:
+        name:
+          type: string
+        university:
+          type: string
+        academic_cycle:
+          type: string
+        age:
+          type: integer
+        hourly_rate:
+          type: number
+          format: float
+        is_active:
+          type: boolean
+      type: object
+    User:
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+          format: email
+        full_name:
+          type: string
+        email_classification:
+          type: string
+          nullable: true
+        verified_email:
+          type: boolean
+        first_name:
+          type: string
+          nullable: true
+        last_name:
+          type: string
+          nullable: true
+        phone:
+          type: string
+          nullable: true
+        date_of_birth:
+          type: string
+          format: date
+          nullable: true
+        university:
+          type: string
+          nullable: true
+        profile_photo_url:
+          type: string
+          nullable: true
+        about_me:
+          type: string
+          nullable: true
+        roles:
+          type: array
+          items:
+            properties:
+              id:
+                type: integer
+              name:
+                type: string
+            type: object
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      type: object
+    UserUpdate:
+      properties:
+        full_name:
+          type: string
+        first_name:
+          type: string
+        last_name:
+          type: string
+        phone:
+          type: string
+        date_of_birth:
+          type: string
+          format: date
+        university:
+          type: string
+        profile_photo_url:
+          type: string
+        about_me:
+          type: string
+      type: object
+    WeeklySchedule:
+      properties:
+        id:
+          type: string
+        therapist_id:
+          type: string
+        day_of_week:
+          description: 'Día de la semana (1=Lunes, 7=Domingo)'
+          type: integer
+        start_time:
+          type: string
+          format: time
+        end_time:
+          type: string
+          format: time
+        is_active:
+          type: boolean
+        updated_by_role:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      type: object
+    WeeklyScheduleCreate:
+      required:
+        - day_of_week
+        - start_time
+        - end_time
+      properties:
+        day_of_week:
+          description: 'Día de la semana (1=Lunes, 7=Domingo)'
+          type: integer
+        start_time:
+          type: string
+          format: time
+        end_time:
+          type: string
+          format: time
+        is_active:
+          type: boolean
+          default: true
+      type: object
+    WeeklyScheduleUpdate:
+      properties:
+        day_of_week:
+          description: 'Día de la semana (1=Lunes, 7=Domingo)'
+          type: integer
+        start_time:
+          type: string
+          format: time
+        end_time:
+          type: string
+          format: time
+        is_active:
+          type: boolean
+      type: object
+  securitySchemes:
+    bearerAuth:
+      type: http
+      description: 'Token JWT de autenticación. Incluir en el header: Authorization: Bearer {token}'
+      bearerFormat: JWT
+      scheme: bearer
+tags:
+  -
+    name: Appointments
+    description: 'Endpoints para gestión de citas'
+  -
+    name: Auth
+    description: 'Endpoints de autenticación'
+  -
+    name: 'Email Domain Rules'
+    description: 'Gestión de reglas de dominios de email'
+  -
+    name: 'File Upload'
+    description: 'Subida de archivos (fotos)'
+  -
+    name: 'Promo Codes'
+    description: 'Gestión de códigos promocionales'
+  -
+    name: 'Site Content'
+    description: 'Gestión de contenido institucional del sitio'
+  -
+    name: 'Team Profiles'
+    description: 'Gestión de perfiles del equipo'
+  -
+    name: Therapists
+    description: 'Endpoints para gestión de terapeutas'
+  -
+    name: 'Therapist Photos'
+    description: 'Gestión de fotos de terapeutas'
+  -
+    name: 'Therapist Pricing'
+    description: 'Gestión de precios de terapeutas'
+  -
+    name: Users
+    description: 'Endpoints para gestión de usuarios'
+  -
+    name: 'User Roles'
+    description: 'Gestión de roles de usuarios'
+  -
+    name: Schedules
+    description: 'Gestión de horarios semanales'
+  -
+    name: 'Schedule Overrides'
+    description: 'Gestión de excepciones de horarios semanales'

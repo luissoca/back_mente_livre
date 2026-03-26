@@ -1,0 +1,27 @@
+RewriteEngine On
+
+# O usar el directorio actual si no se puede detectar
+RewriteBase /backend_mente_livre/
+
+# Servir archivos estáticos desde public/uploads/ cuando se solicita /uploads/
+# Capturar la parte de la ruta después de /uploads/
+RewriteCond %{REQUEST_URI} ^/backend_mente_livre/uploads/(.+)$
+RewriteCond %{REQUEST_FILENAME} !-f
+# Verificar si el archivo existe en public/uploads/
+RewriteCond %{DOCUMENT_ROOT}/backend_mente_livre/public/uploads/%1 -f
+RewriteRule ^uploads/(.+)$ public/uploads/$1 [L]
+
+# Manejar preflight OPTIONS para CORS
+RewriteCond %{REQUEST_METHOD} OPTIONS
+RewriteRule ^(.*)$ index.php [QSA,L]
+
+# Permitir acceso a archivos estáticos existentes directamente (sin pasar por index.php)
+RewriteCond %{REQUEST_FILENAME} -f
+RewriteRule ^(.*)$ - [L]
+
+# Permitir acceso a directorios existentes directamente
+RewriteCond %{REQUEST_FILENAME} -d
+RewriteRule ^(.*)$ - [L]
+
+# Redirigir todas las demás peticiones a index.php
+RewriteRule ^(.*)$ index.php [QSA,L]

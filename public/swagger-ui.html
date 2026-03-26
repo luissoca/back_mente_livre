@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mente Livre API - Documentación</title>
+    <link rel="stylesheet" type="text/css" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css">
+    <style>
+        html {
+            box-sizing: border-box;
+            overflow: -moz-scrollbars-vertical;
+            overflow-y: scroll;
+        }
+        *, *:before, *:after {
+            box-sizing: inherit;
+        }
+        body {
+            margin: 0;
+            padding: 0;
+            background: #fafafa;
+        }
+        /* Topbar con logo */
+        .swagger-ui .topbar {
+            background-color: #2A6F4E;
+            padding: 10px 0;
+            display: block !important;
+        }
+        .swagger-ui .topbar .topbar-wrapper {
+            max-width: 1460px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+        .swagger-ui .topbar .download-url-wrapper {
+            display: none;
+        }
+        /* Información principal */
+        .swagger-ui .info {
+            margin: 50px 0;
+        }
+        .swagger-ui .info .title {
+            color: #2A6F4E;
+            font-size: 36px;
+            font-weight: bold;
+        }
+        /* Botón Authorize - MUY IMPORTANTE */
+        .swagger-ui .btn.authorize {
+            color: white !important;
+            background-color: #2A6F4E !important;
+            border-color: #2A6F4E !important;
+            padding: 8px 20px !important;
+            border-radius: 4px !important;
+            cursor: pointer !important;
+            display: inline-block !important;
+            visibility: visible !important;
+            opacity: 1 !important;
+            margin-left: 10px;
+        }
+        .swagger-ui .btn.authorize:hover {
+            background-color: #1d4d36 !important;
+            border-color: #1d4d36 !important;
+        }
+        .swagger-ui .btn.authorize svg {
+            fill: white;
+        }
+        /* Asegurar que el contenedor del botón sea visible */
+        .swagger-ui .scheme-container {
+            background: #fafafa;
+            padding: 10px 0;
+            margin: 20px 0;
+            box-shadow: 0 1px 2px rgba(0,0,0,.1);
+        }
+        /* Modal de autorización */
+        .swagger-ui .auth-btn-wrapper {
+            padding: 10px 0;
+        }
+        .swagger-ui .auth-container {
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <div id="swagger-ui"></div>
+    <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+    <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-standalone-preset.js"></script>
+    <script>
+        window.onload = function() {
+            const ui = SwaggerUIBundle({
+                url: "/backend_mente_livre/swagger.json",
+                dom_id: '#swagger-ui',
+                deepLinking: true,
+                presets: [
+                    SwaggerUIBundle.presets.apis,
+                    SwaggerUIStandalonePreset
+                ],
+                plugins: [
+                    SwaggerUIBundle.plugins.DownloadUrl
+                ],
+                layout: "StandaloneLayout",
+                persistAuthorization: true,
+                tryItOutEnabled: true,
+                supportedSubmitMethods: ['get', 'post', 'put', 'delete', 'patch'],
+                validatorUrl: null,
+                docExpansion: 'list',
+                defaultModelsExpandDepth: 1,
+                defaultModelExpandDepth: 1,
+                filter: true,
+                showExtensions: true,
+                showCommonExtensions: true,
+                onComplete: function() {
+                    console.log('✅ Swagger UI cargado correctamente');
+                    // Verificar si hay securitySchemes
+                    if (window.ui && window.ui.authActions) {
+                        console.log('✅ Sistema de autorización disponible');
+                    }
+                    // Forzar visibilidad del botón si existe
+                    setTimeout(function() {
+                        const authBtn = document.querySelector('.btn.authorize');
+                        if (authBtn) {
+                            authBtn.style.display = 'inline-block';
+                            authBtn.style.visibility = 'visible';
+                            console.log('✅ Botón Authorize encontrado y visible');
+                        } else {
+                            console.warn('⚠️ Botón Authorize no encontrado');
+                        }
+                    }, 1000);
+                }
+            });
+            window.ui = ui;
+        }
+    </script>
+</body>
+</html>
