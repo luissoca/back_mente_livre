@@ -134,7 +134,33 @@ class IzipayController
 
             if ($orderStatus === 'PAID' && $orderId) {
                 $this->appointmentService->update($orderId, ['status' => 'confirmed']);
-                // Optionally store transactionId for audit
+                // Guardar transaction_id y datos de pago para auditoría
+                                    $amount = $answer['orderDetails']['orderTotalAmount'] ?? 0;
+                                    $currency = $answer['orderDetails']['orderCurrency'] ?? 'PEN';
+                                    $db = \App\Core\Database::getInstance();
+                                    $checkStmt = $db->prepare(
+                                                                "SELECT id FROM appointment_payments WHERE appointment_id = ?"
+                                                            );
+                                    $checkStmt->execute([$orderId]);
+                                    $existing = $checkStmt->fetch(\PDO::FETCH_ASSOC);
+                                    if ($existing) {
+                                                                $payStmt = $db->prepare(
+                                                                                                "UPDATE appointment_payments
+                                                                                                                             SET transaction_id = ?, payment_method = 'izipay',
+                                                                                                                                                              amount_paid = ?, currency = ?,
+                                                                                                                                                                                               payment_confirmed_at = NOW(), status = 'confirmed'
+                                                                                                                                                                                                                            WHERE appointment_id = ?"
+                                                                                            );
+                                                                $payStmt->execute([$transactionId, $amount / 100, $currency, $orderId]);
+                                    } else {
+                                                                $payStmt = $db->prepare(
+                                                                                                "INSERT INTO appointment_payments
+                                                                                                                                (appointment_id, transaction_id, payment_method, amount_paid, currency, payment_confirmed_at, status)
+                                                                                                                                                             VALUES (?, ?, 'izipay', ?, ?, NOW(), 'confirmed')"
+                                                                                            );
+                                                                $payStmt->execute([$orderId, $transactionId, $amount / 100, $currency]);
+                                    }
+                                    error_log('[IzipayWebhook] transaction_id=' . $transactionId . ' guardado para appointment=' . $orderId);
             }
 
             echo "OK";
