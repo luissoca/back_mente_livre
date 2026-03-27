@@ -15,70 +15,105 @@ class AppointmentService
         }
 
     /**
-     * Obtener todas las citas con filtros opcionales.
-             */
-    public function getAll(array $filters = []): array
+     * Obtener todas las citas con filtros opcionales y paginacion.
+             *
+             * @param array $filters  Filtros: therapist_id, status, date_from, date_to, patient_email
+             * @param int   $page     Pagina actual (1-based)
+         * @param int   $perPage  Registros por pagina (max 200)
+         * @return array { data: [], total: int, page: int, per_page: int, total_pages: int }
+         */
+    public function getAll(array $filters = [], int $page = 1, int $perPage = 50): array
         {
-                    $sql = "SELECT
-                                        a.*,
-                                                            t.name                  AS therapist_name,
-                                                                                pc.full_name            AS patient_name,
-                                                                                                    pc.email                AS patient_email,
-                                                                                                                        pc.phone                AS patient_phone,
-                                                                                                                                            ap.original_price,
-                                                                                                                                                                ap.discount_applied,
-                                                                                                                                                                                    ap.final_price,
-                                                                                                                                                                                                        ap.amount_paid,
-                                                                                                                                                                                                                            ap.payment_method,
-                                                                                                                                                                                                                                                ap.payment_confirmed_at
-                                                                                                                                                                                                                                                                FROM appointments a
-                                                                                                                                                                                                                                                                                LEFT JOIN therapists        t  ON a.therapist_id       = t.id
-                                                                                                                                                                                                                                                                                                LEFT JOIN patient_contacts  pc ON a.patient_contact_id = pc.id
-                                                                                                                                                                                                                                                                                                                LEFT JOIN appointment_payments ap ON a.id              = ap.appointment_id
-                                                                                                                                                                                                                                                                                                                                WHERE 1=1";
+                    $perPage = min(max(1, $perPage), 200); // entre 1 y 200
+                $page    = max(1, $page);
+                    $offset  = ($page - 1) * $perPage;
+
+                $baseWhere  = "FROM appointments a
+                                LEFT JOIN therapists        t  ON a.therapist_id       = t.id
+                                                LEFT JOIN patient_contacts  pc ON a.patient_contact_id = pc.id
+                                                                LEFT JOIN appointment_payments ap ON a.id              = ap.appointment_id
+                                                                                WHERE 1=1";
 
                 $params = [];
 
                 if (isset($filters['therapist_id'])) {
-                                $sql .= " AND a.therapist_id = :therapist_id";
+                                $baseWhere .= " AND a.therapist_id = :therapist_id";
                                 $params[':therapist_id'] = $filters['therapist_id'];
                 }
 
                 if (isset($filters['status'])) {
                                 if (is_array($filters['status'])) {
                                                     $placeholders = [];
-                                                    foreach ($filters['status'] as $index => $status) {
-                                                                            $key            = ':status_' . $index;
+                                                    foreach ($filters['status'] as $i => $status) {
+                                                                            $key            = ':status_' . $i;
                                                                             $placeholders[] = $key;
                                                                             $params[$key]   = $status;
                                                     }
-                                                    $sql .= " AND a.status IN (" . implode(', ', $placeholders) . ")";
+                                                    $baseWhere .= " AND a.status IN (" . implode(', ', $placeholders) . ")";
                                 } else {
-                                                    $sql .= " AND a.status = :status";
+                                                    $baseWhere            .= " AND a.status = :status";
                                                     $params[':status'] = $filters['status'];
                                 }
                 }
 
                 if (isset($filters['date_from'])) {
-                                $sql .= " AND a.appointment_date >= :date_from";
+                                $baseWhere .= " AND a.appointment_date >= :date_from";
                                 $params[':date_from'] = $filters['date_from'];
                 }
 
                 if (isset($filters['date_to'])) {
-                                $sql .= " AND a.appointment_date <= :date_to";
+                                $baseWhere .= " AND a.appointment_date <= :date_to";
                                 $params[':date_to'] = $filters['date_to'];
                 }
 
                 if (isset($filters['patient_email'])) {
-                                $sql .= " AND a.patient_email = :patient_email";
+                                $baseWhere .= " AND a.patient_email = :patient_email";
                                 $params[':patient_email'] = $filters['patient_email'];
                 }
 
-                $sql .= " ORDER BY a.appointment_date DESC, a.start_time DESC";
+                // Contar total de registros
+                $countStmt = $this->db->prepare("SELECT COUNT(*) " . $baseWhere);
+                    $countStmt->execute($params);
+                    $total = (int)$countStmt->fetchColumn();
 
-                $stmt = $this->db->prepare($sql);
-                    $stmt->execute($params);
-                    return $stmt->fetchAll(PDO::FETCH_ASSOC);
+                // Obtener registros de la pagina actual
+                $dataParams            = $params;
+                    $dataParams[':limit']  = $perPage;
+                    $dataParams[':offset'] = $offset;
+
+                $sql = "SELECT
+                                    a.*,
+                                                        t.name                  AS therapist_name,
+                                                                            pc.full_name            AS patient_name,
+                                                                                                pc.email                AS patient_email,
+                                                                                                                    pc.phone                AS patient_phone,
+                                                                                                                                        ap.original_price,
+                                                                                                                                                            ap.discount_applied,
+                                                                                                                                                                                ap.final_price,
+                                                                                                                                                                                                    ap.amount_paid,
+                                                                                                                                                                                                                        ap.payment_method,
+                                                                                                                                                                                                                                            ap.payment_confirmed_at
+                                                                                                                                                                                                                                                            " . $baseWhere . "
+                                                                                                                                                                                                                                                                            ORDER BY a.appointment_date DESC, a.start_time DESC
+                                                                                                                                                                                                                                                                                            LIMIT :limit OFFSET :offset";
+
+                $dataStmt = $this->db->prepare($sql);
+
+                // Bind params nombrados + LIMIT/OFFSET como enteros
+                foreach ($params as $key => $value) {
+                                $dataStmt->bindValue($key, $value);
+                }
+                    $dataStmt->bindValue(':limit',  $perPage, PDO::PARAM_INT);
+                    $dataStmt->bindValue(':offset', $offset,  PDO::PARAM_INT);
+                    $dataStmt->execute();
+
+                return [
+                                'data'        => $dataStmt->fetchAll(PDO::FETCH_ASSOC),
+                                'total'       => $total,
+                                'page'        => $page,
+                                'per_page'    => $perPage,
+                                'total_pages' => (int)ceil($total / $perPage),
+                            ];
         }
 
     /**
@@ -174,7 +209,7 @@ class AppointmentService
                                                ':patient_package_id'  => $data['patient_package_id']  ?? null,
                                            ]);
 
-                // Registrar uso de código promocional si aplica
+                // Registrar uso de codigo promocional si aplica
                 if (!empty($data['promo_code_id'])) {
                                 $this->registerPromoCodeUsage($appointmentId, $data);
                 }
@@ -207,7 +242,7 @@ class AppointmentService
 
                 foreach ($allowedFields as $field) {
                                 if (isset($data[$field])) {
-                                                    $fields[]         = "$field = :$field";
+                                                    $fields[]          = "$field = :$field";
                                                     $params[":$field"] = $data[$field];
                                 }
                 }
@@ -291,13 +326,12 @@ class AppointmentService
                                                                       $startTime, $startTime, $endTime, $endTime, $startTime, $endTime
                                                                   ]);
                 } else {
-                                // MySQL DAYOFWEEK: 1=Domingo … 7=Sábado. Nuestro sistema: 1=Lunes … 7=Domingo
-                    $mysqlDay = $dayOfWeek == 7 ? 1 : $dayOfWeek + 1;
+                                $mysqlDay = $dayOfWeek == 7 ? 1 : $dayOfWeek + 1;
                                 $sql      = "SELECT COUNT(*) AS count
                                                          FROM appointments
-                                                                                  WHERE therapist_id          = ?
+                                                                                  WHERE therapist_id                = ?
                                                                                                              AND DAYOFWEEK(appointment_date) = ?
-                                                                                                                                        AND appointment_date      >= CURDATE()
+                                                                                                                                        AND appointment_date            >= CURDATE()
                                                                                                                                                                    AND status IN ($statusPlaceholders)
                                                                                                                                                                                               AND (
                                                                                                                                                                                                                              (start_time <= ? AND end_time >  ?)
@@ -316,12 +350,9 @@ class AppointmentService
     }
 
     // -------------------------------------------------------------------------
-    // Métodos privados
+    // Metodos privados
     // -------------------------------------------------------------------------
 
-    /**
-     * Obtener o crear contacto de paciente por email.
-             */
     private function getOrCreatePatientContact(array $data): string
         {
                     $stmt = $this->db->prepare("SELECT id FROM patient_contacts WHERE email = :email");
@@ -352,9 +383,6 @@ class AppointmentService
                 return $contactId;
         }
 
-    /**
-     * Validar que el paquete de sesiones sea válido para la cita.
-             */
     private function validatePatientPackage(string $packageId, string $therapistId): void
         {
                     $stmt = $this->db->prepare("SELECT * FROM patient_packages WHERE id = ?");
@@ -365,13 +393,12 @@ class AppointmentService
                                 throw new \Exception("El paquete de sesiones seleccionado no existe.");
                 }
                     if ($pkg['therapist_id'] !== $therapistId) {
-                                    throw new \Exception("Este paquete de sesiones solo es válido con el psicólogo original.");
+                                    throw new \Exception("Este paquete de sesiones solo es valido con el psicologo original.");
                     }
                     if ($pkg['status'] !== 'active' || $pkg['used_sessions'] >= $pkg['total_sessions']) {
-                                    throw new \Exception("El paquete de sesiones ya no está activo o no tiene sesiones disponibles.");
+                                    throw new \Exception("El paquete de sesiones ya no esta activo o no tiene sesiones disponibles.");
                     }
 
-                // Verificar que la sesión anterior ya haya terminado
                 if ($pkg['used_sessions'] > 0) {
                                 $lastStmt = $this->db->prepare(
                                                     "SELECT CONCAT(appointment_date, ' ', end_time) AS end_datetime
@@ -385,14 +412,11 @@ class AppointmentService
                                 $last = $lastStmt->fetch(PDO::FETCH_ASSOC);
 
                         if ($last && time() < strtotime($last['end_datetime'])) {
-                                            throw new \Exception("Aún no puedes programar la siguiente sesión. La sesión anterior aún no ha terminado.");
+                                            throw new \Exception("Aun no puedes programar la siguiente sesion. La sesion anterior aun no ha terminado.");
                         }
                 }
         }
 
-    /**
-     * Registrar uso de código promocional.
-             */
     private function registerPromoCodeUsage(string $appointmentId, array $data): void
         {
                     $useId = $this->generateUUID();
@@ -409,19 +433,15 @@ class AppointmentService
                                                ':final_amount'     => (float)($data['final_price']      ?? 0),
                                            ]);
 
-                // Incrementar contador de usos
                 $countStmt = $this->db->prepare("UPDATE promo_codes SET uses_count = uses_count + 1 WHERE id = :id");
                     $countStmt->execute([':id' => $data['promo_code_id']]);
         }
 
-    /**
-     * Crear registro de pago inicial para la cita.
-             */
     private function createPaymentRecord(string $appointmentId, array $data): void
         {
-                    $originalPrice  = (float)($data['original_price']  ?? 0);
+                    $originalPrice   = (float)($data['original_price']  ?? 0);
                     $discountApplied = (float)($data['discount_applied'] ?? 0);
-                    $finalPrice     = (float)($data['final_price']      ?? $originalPrice);
+                    $finalPrice      = (float)($data['final_price']      ?? $originalPrice);
 
                 $stmt = $this->db->prepare(
                                 "INSERT INTO appointment_payments (
@@ -433,20 +453,17 @@ class AppointmentService
                                                                                                                           )"
                             );
                     $stmt->execute([
-                                               ':id'                  => $this->generateUUID(),
-                                               ':appointment_id'      => $appointmentId,
-                                               ':original_price'      => $originalPrice,
-                                               ':discount_applied'    => $discountApplied,
-                                               ':final_price'         => $finalPrice,
-                                               ':amount_paid'         => $data['amount_paid']           ?? null,
-                                               ':payment_method'      => $data['payment_method']        ?? null,
-                                               ':payment_confirmed_at'=> $data['payment_confirmed_at']  ?? null,
+                                               ':id'                   => $this->generateUUID(),
+                                               ':appointment_id'       => $appointmentId,
+                                               ':original_price'       => $originalPrice,
+                                               ':discount_applied'     => $discountApplied,
+                                               ':final_price'          => $finalPrice,
+                                               ':amount_paid'          => $data['amount_paid']          ?? null,
+                                               ':payment_method'       => $data['payment_method']       ?? null,
+                                               ':payment_confirmed_at' => $data['payment_confirmed_at'] ?? null,
                                            ]);
         }
 
-    /**
-     * Incrementar sesiones usadas del paquete y confirmar cita automáticamente.
-             */
     private function incrementPackageSession(string $packageId, string $appointmentId): void
         {
                     $updPkg = $this->db->prepare(
@@ -460,14 +477,10 @@ class AppointmentService
                                 );
                     $updPkg->execute([$packageId]);
 
-                // Las citas de paquete se confirman automaticamente (ya están pagadas)
                 $updAppt = $this->db->prepare("UPDATE appointments SET status = 'confirmed' WHERE id = ?");
                     $updAppt->execute([$appointmentId]);
         }
 
-    /**
-     * Generar UUID v4.
-             */
     private function generateUUID(): string
         {
                     $data    = random_bytes(16);
