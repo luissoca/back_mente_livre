@@ -65,7 +65,7 @@ function configureRoutes(Router $router) {
     $router->get('/email-domain-rules/{id}', 'App\Controllers\EmailDomainRuleController@show');
 
     // Webhooks de pasarelas de pago (sin auth — son llamados por servicios externos)
-    $router->post('/webhooks/mercadopago', 'App\Controllers\MercadoPagoController@webhook');
+    // $router->post('/webhooks/mercadopago', 'App\Controllers\MercadoPagoController@webhook'); // DESACTIVADO — solo Izipay
     $router->post('/izipay/webhook',       'App\Controllers\IzipayController@webhook');
 
     // Proxy de imagenes privadas (B2)
@@ -95,13 +95,13 @@ function configureRoutes(Router $router) {
     $router->get('/users/{id}', 'App\Controllers\UserController@show',  $authMiddleware);
     $router->put('/users/{id}', 'App\Controllers\UserController@update', $authMiddleware);
 
-    // Pagos — iniciar pago
+    // Pagos — solo Izipay activo (MercadoPago y Culqi desactivados)
     $router->post('/izipay/create-payment',             'App\Controllers\IzipayController@createPayment',      $authMiddleware);
-    $router->post('/payments/mercadopago',              'App\Controllers\MercadoPagoController@processPayment',$authMiddleware);
-    $router->post('/payments/mercadopago/preference',   'App\Controllers\MercadoPagoController@createPreference',$authMiddleware);
-    $router->get('/payments/mercadopago/public-key',    'App\Controllers\MercadoPagoController@getPublicKey');
-    $router->post('/payments/culqi',                    'App\Controllers\CulqiController@processPayment',      $authMiddleware);
-    $router->get('/payments/culqi/public-key',          'App\Controllers\CulqiController@getPublicKey');
+    // $router->post('/payments/mercadopago',              'App\Controllers\MercadoPagoController@processPayment',$authMiddleware);
+    // $router->post('/payments/mercadopago/preference',   'App\Controllers\MercadoPagoController@createPreference',$authMiddleware);
+    // $router->get('/payments/mercadopago/public-key',    'App\Controllers\MercadoPagoController@getPublicKey');
+    // $router->post('/payments/culqi',                    'App\Controllers\CulqiController@processPayment',      $authMiddleware);
+    // $router->get('/payments/culqi/public-key',          'App\Controllers\CulqiController@getPublicKey');
 
     // -------------------------------------------------------------------------
     // RUTAS DE STAFF — admin o terapeuta
