@@ -488,4 +488,19 @@ class AppointmentService
                     $data[8] = chr(ord($data[8]) & 0x3f | 0x80);
                     return vsprintf('%s%s-%s-%s-%s-%s%s%s', str_split(bin2hex($data), 4));
         }
+    
+    /**
+     * Registrar confirmacion de pago manual (admin) en appointment_payments.
+     * Actualiza payment_confirmed_at y amount_paid si no estaba seteado.
+     */
+    public function confirmPaymentRecord(string $appointmentId): void {
+        $stmt = $this->db->prepare("
+            UPDATE appointment_payments
+            SET payment_confirmed_at = NOW(),
+                amount_paid = COALESCE(amount_paid, final_price)
+            WHERE appointment_id = :appointment_id
+        ");
+        $stmt->execute([':appointment_id' => $appointmentId]);
     }
+
+}
