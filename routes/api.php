@@ -86,6 +86,7 @@ function configureRoutes(Router $router) {
     $router->post('/appointments',       'App\Controllers\AppointmentController@store',   $authMiddleware);
     $router->put('/appointments/{id}',   'App\Controllers\AppointmentController@update',  $authMiddleware);
     $router->delete('/appointments/{id}','App\Controllers\AppointmentController@destroy', $authMiddleware);
+    $router->patch('/appointments/{id}/confirm-payment','App\Controllers\AppointmentController@confirmPayment', $adminMiddleware);
 
     // Paquetes del paciente (el propio usuario ve sus paquetes)
     $router->get('/patient-packages/my-packages', 'App\Controllers\PatientPackageController@myPackages', $authMiddleware);
