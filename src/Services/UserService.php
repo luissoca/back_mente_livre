@@ -3,7 +3,6 @@
 namespace App\Services;
 
 use App\Core\Database;
-use PDO;
 use App\Services\EmailDomainRuleService;
 
 class UserService {
@@ -16,265 +15,197 @@ class UserService {
     }
 
     /**
-     * Obtener todos los usuarios con filtros
+     * Obtener todos los usuarios con filtros y paginacion
      */
-    public function getAll(array $filters = []): array {
-        $sql = "SELECT 
-            u.id, u.email, u.email_verified, u.is_active,
-            u.created_at, u.updated_at,
-            p.first_name, p.last_name, p.full_name, p.phone
-            FROM users u
+    public function getAll(array $filters = [], int $page = 1, int $perPage = 50): array {
+        $perPage = max(1, min(200, $perPage));
+        $page    = max(1, $page);
+        $offset  = ($page - 1) * $perPage;
+
+        $baseSql = "FROM users u
             LEFT JOIN profiles p ON u.id = p.user_id
             WHERE 1=1";
-        
+
         $params = [];
-        
+
         if (isset($filters['email_classification'])) {
-            // Filtrar por clasificación de email usando la tabla email_classifications
-            $sql .= " AND EXISTS (
-                SELECT 1 FROM email_classifications ec 
-                WHERE ec.user_id = u.id 
+            $baseSql .= " AND EXISTS (
+                SELECT 1 FROM email_classifications ec
+                WHERE ec.user_id = u.id
                 AND ec.account_type = :email_classification
             )";
             $params[':email_classification'] = $filters['email_classification'];
         }
-        
-        if (isset($filters['verified_email'])) {
-            $sql .= " AND u.email_verified = :verified_email";
-            $params[':verified_email'] = $filters['verified_email'] ? 'true' : 'false';
+
+        if (isset($filters['is_active'])) {
+            $baseSql .= " AND u.is_active = :is_active";
+            $params[':is_active'] = $filters['is_active'];
         }
-        
-        $sql .= " ORDER BY u.created_at DESC";
-        
-        $stmt = $this->db->prepare($sql);
-        $stmt->execute($params);
-        
+
+        if (isset($filters['role'])) {
+            $baseSql .= " AND EXISTS (
+                SELECT 1 FROM user_roles ur
+                JOIN roles r ON ur.role_id = r.id
+                WHERE ur.user_id = u.id AND r.name = :role
+            )";
+            $params[':role'] = $filters['role'];
+        }
+
+        // COUNT query
+        $countStmt = $this->db->prepare("SELECT COUNT(DISTINCT u.id) " . $baseSql);
+        foreach ($params as $key => $value) {
+            $countStmt->bindValue($key, $value);
+        }
+        $countStmt->execute();
+        $total = (int) $countStmt->fetchColumn();
+
+        // Data query
+        $dataSql = "SELECT u.id, u.email, u.email_verified, u.is_active,
+                u.created_at, u.updated_at,
+                p.first_name, p.last_name, p.full_name, p.phone
+            " . $baseSql . "
+            ORDER BY u.created_at DESC
+            LIMIT :limit OFFSET :offset";
+
+        $stmt = $this->db->prepare($dataSql);
+        foreach ($params as $key => $value) {
+            $stmt->bindValue($key, $value);
+        }
+        $stmt->bindValue(':limit', $perPage, PDO::PARAM_INT);
+        $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+        $stmt->execute();
         $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        
-        // Obtener roles de cada usuario
+
         foreach ($users as &$user) {
             $user['roles'] = $this->getUserRoles($user['id']);
-            // Agregar email_classification e is_university_verified (desde email_classifications)
-            $classification = $this->ensureEmailClassification($user['id'], $user['email'] ?? null);
-            $user['email_classification'] = $classification['account_type'] ?? null;
-            $user['is_university_verified'] = isset($classification['is_university_verified'])
-                ? (bool)$classification['is_university_verified']
-                : null;
-            // Mapear email_verified a verified_email para compatibilidad con el frontend
-            $user['verified_email'] = (bool)($user['email_verified'] ?? false);
+            $this->ensureEmailClassification($user['id'], $user['email']);
         }
-        
-        return $users;
+
+        return [
+            'data'        => $users,
+            'total'       => $total,
+            'page'        => $page,
+            'per_page'    => $perPage,
+            'total_pages' => $total > 0 ? (int) ceil($total / $perPage) : 0,
+        ];
     }
 
-    /**
-     * Obtener usuario por ID
-     */
-    public function getById(string $id): ?array {
-        $sql = "SELECT 
-            u.id, u.email, u.email_verified, u.is_active,
-            u.created_at, u.updated_at,
-            p.first_name, p.last_name, p.full_name, p.phone
+    private function getUserRoles(int $userId): array {
+        $stmt = $this->db->prepare("
+            SELECT r.name
+            FROM user_roles ur
+            JOIN roles r ON ur.role_id = r.id
+            WHERE ur.user_id = :user_id
+        ");
+        $stmt->execute([':user_id' => $userId]);
+        return $stmt->fetchAll(PDO::FETCH_COLUMN);
+    }
+
+    private function ensureEmailClassification(int $userId, string $email): void {
+        $stmt = $this->db->prepare("
+            SELECT COUNT(*) FROM email_classifications WHERE user_id = :user_id
+        ");
+        $stmt->execute([':user_id' => $userId]);
+        if ((int) $stmt->fetchColumn() === 0) {
+            $classification = $this->emailDomainRuleService->classifyEmail($email);
+            $ins = $this->db->prepare("
+                INSERT INTO email_classifications (user_id, account_type, classified_at)
+                VALUES (:user_id, :account_type, NOW())
+            ");
+            $ins->execute([
+                ':user_id'      => $userId,
+                ':account_type' => $classification,
+            ]);
+        }
+    }
+
+    public function getById(int $id): ?array {
+        $stmt = $this->db->prepare("
+            SELECT u.id, u.email, u.email_verified, u.is_active,
+                u.created_at, u.updated_at,
+                p.first_name, p.last_name, p.full_name, p.phone
             FROM users u
             LEFT JOIN profiles p ON u.id = p.user_id
-            WHERE u.id = :id";
-        
-        $stmt = $this->db->prepare($sql);
+            WHERE u.id = :id
+        ");
         $stmt->execute([':id' => $id]);
-        
         $user = $stmt->fetch(PDO::FETCH_ASSOC);
-        
-        if ($user) {
-            $user['roles'] = $this->getUserRoles($id);
-            // Agregar email_classification e is_university_verified
-            $classification = $this->ensureEmailClassification($id, $user['email'] ?? null);
-            $user['email_classification'] = $classification['account_type'] ?? null;
-            $user['is_university_verified'] = isset($classification['is_university_verified'])
-                ? (bool)$classification['is_university_verified']
-                : null;
-            // Mapear email_verified a verified_email para compatibilidad
-            $user['verified_email'] = (bool)($user['email_verified'] ?? false);
-        }
-        
-        return $user ?: null;
+        if (!$user) return null;
+        $user['roles'] = $this->getUserRoles($user['id']);
+        return $user;
     }
 
-    /**
-     * Obtener usuario por email
-     */
     public function getByEmail(string $email): ?array {
-        $sql = "SELECT 
-            u.id, u.email, u.email_verified, u.is_active, u.password_hash,
-            u.created_at, u.updated_at
+        $stmt = $this->db->prepare("
+            SELECT u.id, u.email, u.email_verified, u.is_active,
+                u.created_at, u.updated_at,
+                p.first_name, p.last_name, p.full_name, p.phone
             FROM users u
-            WHERE u.email = :email";
-        
-        $stmt = $this->db->prepare($sql);
+            LEFT JOIN profiles p ON u.id = p.user_id
+            WHERE u.email = :email
+        ");
         $stmt->execute([':email' => $email]);
-        
         $user = $stmt->fetch(PDO::FETCH_ASSOC);
-        
-        if ($user) {
-            $user['roles'] = $this->getUserRoles($user['id']);
-            // Agregar email_classification e is_university_verified
-            $classification = $this->ensureEmailClassification($user['id'], $user['email'] ?? null);
-            $user['email_classification'] = $classification['account_type'] ?? null;
-            $user['is_university_verified'] = isset($classification['is_university_verified'])
-                ? (bool)$classification['is_university_verified']
-                : null;
-            // Mapear email_verified a verified_email para compatibilidad
-            $user['verified_email'] = (bool)($user['email_verified'] ?? false);
-        }
-        
-        return $user ?: null;
+        if (!$user) return null;
+        $user['roles'] = $this->getUserRoles($user['id']);
+        return $user;
     }
 
-    /**
-     * Actualizar usuario
-     */
-    public function update(string $id, array $data): bool {
-        $this->db->beginTransaction();
-        
-        try {
-            // Actualizar datos básicos del usuario (solo email, no full_name que está en profiles)
-            if (!empty($data['email'])) {
-                $sql = "UPDATE users SET email = :email WHERE id = :id";
-                $stmt = $this->db->prepare($sql);
-                $stmt->execute([':email' => $data['email'], ':id' => $id]);
+    public function update(int $id, array $data): bool {
+        $allowedFields = ['email_verified', 'is_active'];
+        $setClauses = [];
+        $params = [':id' => $id];
+
+        foreach ($allowedFields as $field) {
+            if (array_key_exists($field, $data)) {
+                $setClauses[] = "$field = :$field";
+                $params[":$field"] = $data[$field];
             }
-            
-            // Actualizar o crear perfil
-            $profileFields = ['first_name', 'last_name', 'full_name', 'phone'];
-            $hasProfileData = false;
-            
-            foreach ($profileFields as $field) {
-                if (isset($data[$field])) {
-                    $hasProfileData = true;
-                    break;
-                }
+        }
+
+        if (empty($setClauses)) return false;
+
+        $sql = "UPDATE users SET " . implode(', ', $setClauses) . ", updated_at = NOW() WHERE id = :id";
+        $stmt = $this->db->prepare($sql);
+        return $stmt->execute($params);
+    }
+
+    public function updateProfile(int $userId, array $data): bool {
+        $allowedFields = ['first_name', 'last_name', 'full_name', 'phone'];
+        $setClauses = [];
+        $params = [':user_id' => $userId];
+
+        foreach ($allowedFields as $field) {
+            if (array_key_exists($field, $data)) {
+                $setClauses[] = "$field = :$field";
+                $params[":$field"] = $data[$field];
             }
-            
-            if ($hasProfileData) {
-                // Verificar si existe perfil
-                $stmt = $this->db->prepare("SELECT id FROM profiles WHERE user_id = :user_id");
-                $stmt->execute([':user_id' => $id]);
-                $existingProfile = $stmt->fetch(PDO::FETCH_ASSOC);
-                
-                if ($existingProfile) {
-                    // Actualizar perfil existente
-                    $updateFields = [];
-                    $updateParams = [':user_id' => $id];
-                    
-                    foreach ($profileFields as $field) {
-                        if (isset($data[$field])) {
-                            $updateFields[] = "$field = :$field";
-                            $updateParams[":$field"] = $data[$field];
-                        }
-                    }
-                    
-                    if (!empty($updateFields)) {
-                        $sql = "UPDATE profiles SET " . implode(', ', $updateFields) . " WHERE user_id = :user_id";
-                        $stmt = $this->db->prepare($sql);
-                        $stmt->execute($updateParams);
-                    }
-                } else {
-                    // Crear nuevo perfil
-                    $insertFields = ['id', 'user_id'];
-                    $insertValues = [':id', ':user_id'];
-                    $insertParams = [
-                        ':id' => $this->generateUUID(),
-                        ':user_id' => $id
-                    ];
-                    
-                    foreach ($profileFields as $field) {
-                        if (isset($data[$field])) {
-                            $insertFields[] = $field;
-                            $insertValues[] = ":$field";
-                            $insertParams[":$field"] = $data[$field];
-                        }
-                    }
-                    
-                    $sql = "INSERT INTO profiles (" . implode(', ', $insertFields) . ") 
-                            VALUES (" . implode(', ', $insertValues) . ")";
-                    $stmt = $this->db->prepare($sql);
-                    $stmt->execute($insertParams);
-                }
-            }
-            
-            $this->db->commit();
-            return true;
-            
-        } catch (\Exception $e) {
-            $this->db->rollBack();
-            throw $e;
         }
+
+        if (empty($setClauses)) return false;
+
+        $stmt = $this->db->prepare("SELECT id FROM profiles WHERE user_id = :user_id");
+        $stmt->execute([':user_id' => $userId]);
+        $exists = $stmt->fetch();
+
+        if ($exists) {
+            $sql = "UPDATE profiles SET " . implode(', ', $setClauses) . " WHERE user_id = :user_id";
+        } else {
+            $fields = array_map(fn($c) => trim(explode('=', $c)[0]), $setClauses);
+            $fields[] = 'user_id';
+            $placeholders = array_map(fn($f) => ":$f", $fields);
+            $sql = "INSERT INTO profiles (" . implode(', ', $fields) . ") VALUES (" . implode(', ', $placeholders) . ")";
+        }
+
+        $stmt = $this->db->prepare($sql);
+        return $stmt->execute($params);
     }
 
-    /**
-     * Obtener roles de un usuario
-     */
-    private function getUserRoles(string $userId): array {
-        try {
-            $sql = "SELECT r.id, r.name 
-                    FROM user_roles ur
-                    INNER JOIN roles r ON ur.role_id = r.id
-                    WHERE ur.user_id = :user_id";
-            
-            $stmt = $this->db->prepare($sql);
-            $stmt->execute([':user_id' => $userId]);
-            
-            return $stmt->fetchAll(PDO::FETCH_ASSOC);
-        } catch (\Exception $e) {
-            error_log('Error getting user roles for user ' . $userId . ': ' . $e->getMessage());
-            // Retornar array vacío en caso de error para no romper el flujo
-            return [];
-        }
+    public function deactivate(int $id): bool {
+        return $this->update($id, ['is_active' => 0]);
     }
 
-    /**
-     * Obtener clasificación de email de un usuario
-     */
-    private function getEmailClassificationData(string $userId): ?array {
-        try {
-            $sql = "SELECT account_type, is_university_verified 
-                    FROM email_classifications 
-                    WHERE user_id = :user_id 
-                    ORDER BY created_at DESC 
-                    LIMIT 1";
-            
-            $stmt = $this->db->prepare($sql);
-            $stmt->execute([':user_id' => $userId]);
-            
-            $result = $stmt->fetch(PDO::FETCH_ASSOC);
-            return $result ?: null;
-        } catch (\Exception $e) {
-            error_log('Error getting email classification for user ' . $userId . ': ' . $e->getMessage());
-            return null;
-        }
-    }
-
-    private function ensureEmailClassification(string $userId, ?string $email): ?array {
-        $classification = $this->getEmailClassificationData($userId);
-        if ($classification) {
-            return $classification;
-        }
-
-        if (empty($email)) {
-            return null;
-        }
-
-        // Crear o actualizar clasificación si no existe
-        $this->emailDomainRuleService->saveEmailClassification($userId, $email);
-        return $this->getEmailClassificationData($userId);
-    }
-
-    /**
-     * Generar UUID v4
-     */
-    private function generateUUID(): string {
-        $data = random_bytes(16);
-        $data[6] = chr(ord($data[6]) & 0x0f | 0x40);
-        $data[8] = chr(ord($data[8]) & 0x3f | 0x80);
-        return vsprintf('%s%s-%s-%s-%s-%s%s%s', str_split(bin2hex($data), 4));
+    public function activate(int $id): bool {
+        return $this->update($id, ['is_active' => 1]);
     }
 }
