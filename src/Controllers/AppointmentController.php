@@ -162,6 +162,17 @@ class AppointmentController extends BaseController {
 
         try {
             $this->appointmentService->update($id, $data);
+
+            // Si se cancela la cita, notificar al paciente por email (falla silenciosamente)
+            if (isset($data['status']) && $data['status'] === 'cancelled') {
+                // Recargar la cita para tener todos los campos (therapist_name, etc.)
+                $updated = $this->appointmentService->getById($id);
+                if ($updated) {
+                    $emailService = new EmailService();
+                    $emailService->sendAppointmentCancellation($updated);
+                }
+            }
+
             Response::json(['message' => 'Cita actualizada exitosamente']);
         } catch (\Exception $e) {
             error_log('Error updating appointment: ' . $e->getMessage());
